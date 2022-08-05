@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+
 	"os"
 	"strconv"
 	"strings"
@@ -76,7 +77,12 @@ func getPerson(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println(err.Error())
 	}
-	rows.Next()
+	if rows.Next() == false {
+		person.Id = "-1"
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 	err = rows.Scan(&person.Id, &person.Firstname, &person.Lastname, &person.Address, &person.Dob, &person.Photoid)
 	if err != nil {
 		panic(err.Error())
@@ -137,17 +143,13 @@ func updatePerson(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	var person Person
 	json.NewDecoder(r.Body).Decode(&person)
-	temp_id := ""
-	insert, err := db.Query("UPDATE persons SET first_name = '" + person.Firstname + "', last_name = '" + person.Lastname + "', address = '" + person.Address + "', date_of_birth = '" + person.Dob + "', photo_id = '" + temp_id + "' WHERE id = '" + params["id"] + "'")
+	insert, err := db.Query("UPDATE persons SET first_name = '" + person.Firstname + "', last_name = '" + person.Lastname + "', address = '" + person.Address + "', date_of_birth = '" + person.Dob + "' WHERE id = '" + params["id"] + "'")
 
 	if err != nil {
 		fmt.Println(err.Error())
 	}
+	fmt.Println("photo_id: ", person.Photoid)
 	if person.Photoid == "" {
-		var old_photo string
-		_ = db.QueryRow("SELECT photo_id from persons WHERE person.id = " + params["id"]).Scan(&old_photo)
-		_, _ = db.Query(
-			"UPDATE persons SET photo_id = '" + old_photo + "' WHERE id = '" + params["id"] + "'")
 		return
 	}
 
@@ -194,7 +196,6 @@ func main() {
 	router.HandleFunc("/api/persons/{id}", deletePerson).Methods("DELETE")
 	fs := http.FileServer(http.Dir("./temp-images/"))
 	router.PathPrefix("/temp-images/").Handler(http.StripPrefix("/temp-images/", fs))
-	// http.Handle("/image", http.StripPrefix("/", http.FileServer(http.Dir("path/to/file"))))
 
 	// liston port (log is to print errors bss)
 	// (<port>, <what-to-listen-?>)
